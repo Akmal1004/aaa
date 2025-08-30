@@ -55,10 +55,10 @@ def login_to_site(driver: webdriver.Chrome, wait: WebDriverWait, email: str, pwd
     logging.info("🔑 Opening login page...")
     driver.get("https://intradayscreener.com/login")
 
-    # Using more robust locators
+    # Using more robust locators with explicit waits for all elements
     email_box = wait.until(EC.presence_of_element_located((By.ID, 'inputEmail')))
-    pwd_box = driver.find_element(By.ID, 'inputPassword')
-    login_btn = driver.find_element(By.XPATH, '//button[text()="Login"]')
+    pwd_box = wait.until(EC.presence_of_element_located((By.XPATH, '//input[@type="password"]')))
+    login_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[text()="Login"]')))
 
     email_box.send_keys(email)
     pwd_box.send_keys(pwd)

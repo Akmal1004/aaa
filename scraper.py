@@ -55,10 +55,10 @@ def login_to_site(driver: webdriver.Chrome, wait: WebDriverWait, email: str, pwd
     logging.info("🔑 Opening login page...")
     driver.get("https://intradayscreener.com/login")
 
-    # Using more robust locators with explicit waits for all elements
+    # Reverting to original XPaths as requested by user, but keeping explicit waits for robustness.
     email_box = wait.until(EC.presence_of_element_located((By.ID, 'inputEmail')))
-    pwd_box = wait.until(EC.presence_of_element_located((By.XPATH, '//input[@type="password"]')))
-    login_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[text()="Login"]')))
+    pwd_box = wait.until(EC.presence_of_element_located((By.XPATH, '/html/body/app-root/div/app-login-layout/div/app-signin/div/div[1]/div/div[2]/div/div/div/div/div/div/form/div[2]/div/input')))
+    login_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '/html/body/app-root/div/app-login-layout/div/app-signin/div/div[1]/div/div[2]/div/div/div/div/div/div/form/button')))
 
     email_box.send_keys(email)
     pwd_box.send_keys(pwd)

@@ -66,11 +66,10 @@ def login_to_site(driver: webdriver.Chrome, wait: WebDriverWait, email: str, pwd
     logging.info("✅ Logged in successfully")
 
     try:
-        # Using a more specific and robust locator for the popup close button
-        close_button = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.XPATH, '//div[@id="whatsnewModal"]//button[contains(@class, "close")]'))
-        )
-        close_button.click()
+        # Reverting to the original XPath for the popup close button
+        WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.XPATH, '//*[@id="whatsnewModal"]/div/div/div[1]/button/span'))
+        ).click()
         logging.info("ℹ️ Closed 'What's New' popup.")
     except:
         logging.info("ℹ️ No popup appeared.")
@@ -79,28 +78,20 @@ def login_to_site(driver: webdriver.Chrome, wait: WebDriverWait, email: str, pwd
 def navigate_to_watchlist_and_export(driver: webdriver.Chrome, wait: WebDriverWait):
     """Navigates to EOD scans, selects F&O, and exports CSV."""
     logging.info("📂 Navigating to EOD scans...")
-    eod_scans = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, '//a[contains(text(), "EOD Scans")]')))
+    eod_scans = wait.until(EC.presence_of_element_located(
+        (By.XPATH, '/html/body/app-root/div/app-home-layout/div[1]/app-nav-bar/div[1]/nav/div[3]/ul/li[5]/ul/li[1]/a/i')))
     driver.execute_script("arguments[0].click();", eod_scans)
     logging.info("✅ Reached Next Day Watchlist page")
 
     logging.info("🔀 Clicking F&O button...")
     fno_button = wait.until(EC.element_to_be_clickable(
-        (By.XPATH, '//button[contains(text(), "F&O")]')))
+        (By.XPATH, '/html/body/app-root/div/app-home-layout/div[1]/app-index-panel/div/div[2]/div/button[1]')))
     fno_button.click()
     logging.info("✅ Switched to F&O watchlist")
 
-    # Wait for the table to reload by waiting for the loader to disappear
-    try:
-        logging.info("⏳ Waiting for table data to load...")
-        wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, 'div.loader-container')))
-        logging.info("✅ Table data loaded.")
-    except:
-        logging.warning("⚠️ Loader not found or did not disappear, proceeding with caution.")
-
     logging.info("⬇️ Clicking Export CSV...")
     wait.until(EC.element_to_be_clickable(
-        (By.XPATH, '//button[contains(text(), "Export CSV")]'))
+        (By.XPATH, '/html/body/app-root/div/app-home-layout/div[2]/app-watch-list/div/div[2]/div/div[1]/div[2]/button'))
     ).click()
     logging.info("✅ CSV Export initiated.")
 

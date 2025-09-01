@@ -28,7 +28,6 @@ os.makedirs(download_dir, exist_ok=True)
 
 # ---------------- CHROME OPTIONS ----------------
 chrome_options = Options()
-chrome_options.add_argument("--headless") # Running in headless mode
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--start-maximized")

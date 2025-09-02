@@ -194,14 +194,17 @@ def main():
                 ltp_parts = df['LTP'].astype(str).str.extract(r'([\d\.]+)\s*\((.+)\)')
 
                 # Prepare DataFrame for database insertion, handling different column sets
+                # Dynamically find the performance index column to handle variations
+                performance_col = next((col for col in df.columns if 'relative out performance' in col.lower()), None)
+
                 db_df = pd.DataFrame({
                     'symbol': df['Symbol'],
                     'ltp_price': ltp_parts[0],
                     'ltp_percent_change': ltp_parts[1],
                     'out_performance_7d_percent': df.get('7 day Out Performance'),
                     'out_performance_3m_percent': df.get('3M Out Performance'),
-                    'out_performance_6m_percent': df.get('6 Month Out Performance'), # Handles the 6-month files
-                    'relative_out_performance_wrt_index': df.get('Relative Out Performance wrt Index')
+                    'out_performance_6m_percent': df.get('6 Month Out Performance'),
+                    'relative_out_performance_wrt_index': df[performance_col] if performance_col else None
                 })
 
                 records = db_df.to_dict(orient="records")

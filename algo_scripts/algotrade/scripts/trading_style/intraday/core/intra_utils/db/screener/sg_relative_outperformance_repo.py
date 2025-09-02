@@ -56,8 +56,9 @@ class SgRelativeOutperformance(Base):
     symbol = Column("symbol", String(50), nullable=False, unique=True)
     ltp_price = Column("ltp_price", String(50))
     ltp_percent_change = Column("ltp_percent_change", String(50))
-    out_performance_7d_percent = Column("out_performance_7d_percent", String(50))
-    out_performance_3m_percent = Column("out_performance_3m_percent", String(50))
+    out_performance_7d_percent = Column("out_performance_7d_percent", String(50), nullable=True)
+    out_performance_3m_percent = Column("out_performance_3m_percent", String(50), nullable=True)
+    out_performance_6m_percent = Column("out_performance_6m_percent", String(50), nullable=True)
     relative_out_performance_wrt_index = Column("relative_out_performance_wrt_index", Text)
     created_at = Column(String(100), default=lambda: now_ist().isoformat())
 

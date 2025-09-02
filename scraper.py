@@ -187,18 +187,20 @@ def main():
             try:
                 logging.info(f"📄 Processing file: {csv_file}")
                 df = pd.read_csv(csv_file)
-                df.columns = df.columns.str.strip()
+                # Clean column names: strip whitespace and remove trailing colons
+                df.columns = [col.strip().rstrip(':').strip() for col in df.columns]
 
                 # Parse LTP column
                 ltp_parts = df['LTP'].astype(str).str.extract(r'([\d\.]+)\s*\((.+)\)')
 
-                # Prepare DataFrame for database insertion
+                # Prepare DataFrame for database insertion, handling different column sets
                 db_df = pd.DataFrame({
                     'symbol': df['Symbol'],
                     'ltp_price': ltp_parts[0],
                     'ltp_percent_change': ltp_parts[1],
                     'out_performance_7d_percent': df.get('7 day Out Performance'),
                     'out_performance_3m_percent': df.get('3M Out Performance'),
+                    'out_performance_6m_percent': df.get('6 Month Out Performance'), # Handles the 6-month files
                     'relative_out_performance_wrt_index': df.get('Relative Out Performance wrt Index')
                 })
 
@@ -212,10 +214,22 @@ def main():
             logging.error("❌ No records were extracted from the CSV files. Nothing to insert into the database.")
             return
 
-        # De-duplicate the records based on the 'symbol' key before insertion
+        # Sort records to ensure consistent priority during de-duplication.
+        # We prioritize 'underperforming' so it overwrites 'outperforming' for the same symbol.
+        def sort_key(record):
+            status = record.get('relative_out_performance_wrt_index', '').lower()
+            if 'outperforming' in status:
+                return 1  # Process first
+            if 'underperforming' in status:
+                return 2  # Process second, will overwrite
+            return 0  # Should not happen
+
+        all_records.sort(key=sort_key)
+
+        # De-duplicate the records based on the 'symbol' key. The last one seen wins.
         unique_records_dict = {record['symbol']: record for record in all_records}
         unique_records = list(unique_records_dict.values())
-        logging.info(f"Removed {len(all_records) - len(unique_records)} duplicate records based on symbol.")
+        logging.info(f"Removed {len(all_records) - len(unique_records)} duplicate records, prioritizing underperforming status.")
 
         # Database operations: upsert all records.
         create_tables()

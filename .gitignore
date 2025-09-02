@@ -13,5 +13,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Downloaded packages
+# Downloaded packages & files
 google-chrome-stable_current_amd64.deb
+downloads/

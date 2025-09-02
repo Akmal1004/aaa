@@ -1,85 +1,112 @@
-import sqlite3
-import pandas as pd
+import os
+import logging
+from datetime import datetime
+import pytz
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, Column, Integer, String, Text, delete
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy.exc import SQLAlchemyError
 
-class Repository:
-    def __init__(self, db_name='screener_data.db'):
-        """
-        Initializes the Repository. Does not connect automatically.
-        """
-        self.db_name = db_name
-        self.conn = None
-        self.cursor = None
+# Load .env file
+load_dotenv()
 
-    def connect(self):
-        """Establishes the database connection."""
-        if self.conn is None:
-            self.conn = sqlite3.connect(self.db_name)
-            self.cursor = self.conn.cursor()
-            print("Database connection established.")
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-    def close(self):
-        """Closes the database connection if it exists."""
-        if self.conn:
-            self.conn.close()
-            self.conn = None
-            self.cursor = None
-            print("Database connection closed.")
+# Default to a local SQLite DB if DATABASE_URL is not set
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./relative_outperformance.db")
+if not DATABASE_URL:
+    raise ValueError("Please set DATABASE_URL in .env file.")
 
-    def create_table(self):
-        """
-        Creates the 'relative_performance' table if it does not exist.
-        Assumes that a connection is already established.
-        """
-        if self.conn is None:
-            raise Exception("Database not connected. Call connect() before using the repository.")
+# Setup timezone
+IST = pytz.timezone("Asia/Kolkata")
 
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS relative_performance (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbol TEXT NOT NULL,
-                ltp REAL,
-                ltp_percent_change REAL,
-                seven_day_outperformance REAL,
-                six_month_outperformance REAL,
-                relative_outperformance_wrt_index TEXT,
-                scan_type TEXT,
-                stock_segment TEXT,
-                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(symbol, scan_type, stock_segment)
-            )
-        ''')
-        self.conn.commit()
-        print("Table 'relative_performance' created or already exists.")
+def now_ist():
+    """Returns the current time in IST timezone."""
+    return datetime.now(IST)
 
-    def insert_data(self, data_df: pd.DataFrame):
-        """
-        Inserts data using a 'delete-then-insert' approach (upsert).
-        Assumes that a connection is already established.
-        """
-        if self.conn is None:
-            raise Exception("Database not connected. Call connect() before using the repository.")
+# SQLAlchemy Setup
+try:
+    engine = create_engine(DATABASE_URL, echo=False)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base = declarative_base()
+except Exception as e:
+    logger.critical(f"Failed to connect to the database: {e}")
+    # Exit if DB connection fails, as the app is useless without it.
+    exit(1)
 
-        if data_df.empty:
-            print("No data to insert.")
-            return
+def get_db_session():
+    """Provides a transactional database session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-        unique_scans = data_df[['scan_type', 'stock_segment']].drop_duplicates().to_dict('records')
+def create_tables():
+    """Create all tables in the database."""
+    logger.info("Initializing database tables...")
+    Base.metadata.create_all(bind=engine)
+    logger.info("Table initialization complete.")
 
-        with self.conn: # Use a transaction for the whole operation
-            for scan in unique_scans:
-                scan_type, stock_segment = scan['scan_type'], scan['stock_segment']
-                print(f"Deleting old data for {scan_type} - {stock_segment}...")
-                self.cursor.execute(
-                    "DELETE FROM relative_performance WHERE scan_type = ? AND stock_segment = ?",
-                    (scan_type, stock_segment)
-                )
+# ORM Table Model
+class SgRelativeOutperformance(Base):
+    __tablename__ = "relative_outperformance_info"
 
-            print("Inserting new data...")
-            data_df.to_sql(
-                'relative_performance',
-                self.conn,
-                if_exists='append',
-                index=False
-            )
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    # The user's schema has symbol as unique, which means we can't store the same
+    # stock from different scan types. The "wipe-and-replace" logic supports this.
+    symbol = Column("symbol", String(50), nullable=False, unique=True)
+    ltp_price = Column("ltp_price", String(50))
+    ltp_percent_change = Column("ltp_percent_change", String(50))
+    out_performance_7d_percent = Column("out_performance_7d_percent", String(50))
+    # Added 3M performance as per the user's reference code
+    out_performance_3m_percent = Column("out_performance_3m_percent", String(50))
+    six_month_outperformance = Column("six_month_outperformance", String(50))
+    relative_out_performance_wrt_index = Column("relative_out_performance_wrt_index", Text)
+    # The scraper will not provide scan_type or segment anymore, as the new schema
+    # does not support it. created_at will be the indicator of freshness.
+    created_at = Column(String(100), default=lambda: now_ist().isoformat())
 
-        print(f"Upserted {len(data_df)} records into 'relative_performance'.")
+    def __repr__(self):
+        return f"<SgRelativeOutperformance(symbol='{self.symbol}', ltp_price='{self.ltp_price}')>"
+
+# Repository Class
+class SgRelativeOutperformanceRepository:
+    """Handles all database operations for the SgRelativeOutperformance table."""
+    def __init__(self, db_session: Session):
+        self.session = db_session
+
+    def bulk_insert(self, records: list[dict]):
+        """Bulk inserts a list of records."""
+        if not records:
+            logger.info("No records to bulk insert.")
+            return 0
+        try:
+            self.session.bulk_insert_mappings(SgRelativeOutperformance, records)
+            self.session.commit()
+            count = len(records)
+            logger.info(f"Successfully bulk inserted {count} records.")
+            return count
+        except SQLAlchemyError as e:
+            logger.error(f"Error during bulk insert: {e}", exc_info=True)
+            self.session.rollback()
+            return 0
+
+    def delete_all(self):
+        """Deletes all records from the table."""
+        try:
+            stmt = delete(SgRelativeOutperformance)
+            result = self.session.execute(stmt)
+            self.session.commit()
+            logger.info(f"Deleted all {result.rowcount} records from the table.")
+            return result.rowcount
+        except SQLAlchemyError as e:
+            logger.error(f"Error deleting all records: {e}", exc_info=True)
+            self.session.rollback()
+            return 0
+
+# Allow running this file directly to create the tables
+if __name__ == "__main__":
+    create_tables()

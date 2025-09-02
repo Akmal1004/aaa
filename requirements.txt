@@ -3,3 +3,5 @@ webdriver-manager
 beautifulsoup4
 python-dotenv
 pandas
+SQLAlchemy
+pytz

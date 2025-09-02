@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 import pytz
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, Integer, String, Text, select, delete
+from sqlalchemy import create_engine, Column, Integer, String, Text, select, delete, func
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -103,6 +103,8 @@ class SgRelativeOutperformanceRepository:
     def bulk_upsert(self, records: list[dict]):
         """
         Performs a bulk 'upsert' (insert on duplicate key update) for MySQL.
+        This version intelligently merges data, preventing existing values from
+        being overwritten by NULLs.
         """
         if not records:
             logger.info("No records provided for bulk upsert.")
@@ -111,13 +113,18 @@ class SgRelativeOutperformanceRepository:
         try:
             insert_stmt = mysql_insert(SgRelativeOutperformance).values(records)
 
-            # Define which columns to update if a duplicate key (symbol) is found.
-            # We update all columns except the primary key ('id') and the unique key ('symbol').
-            # We also exclude 'created_at' as it should only be set on creation.
+            # Define the update logic for duplicate keys.
+            # We use COALESCE to keep the existing value if the new value is NULL.
+            # This effectively merges records from different file types.
+            # The 'relative_out_performance_wrt_index' is always updated to reflect the latest status
+            # based on the pre-sorted record list.
             update_cols = {
-                col.name: col
-                for col in insert_stmt.inserted
-                if col.name not in ["id", "symbol", "created_at"]
+                'ltp_price': func.coalesce(insert_stmt.inserted.ltp_price, SgRelativeOutperformance.ltp_price),
+                'ltp_percent_change': func.coalesce(insert_stmt.inserted.ltp_percent_change, SgRelativeOutperformance.ltp_percent_change),
+                'out_performance_7d_percent': func.coalesce(insert_stmt.inserted.out_performance_7d_percent, SgRelativeOutperformance.out_performance_7d_percent),
+                'out_performance_3m_percent': func.coalesce(insert_stmt.inserted.out_performance_3m_percent, SgRelativeOutperformance.out_performance_3m_percent),
+                'out_performance_6m_percent': func.coalesce(insert_stmt.inserted.out_performance_6m_percent, SgRelativeOutperformance.out_performance_6m_percent),
+                'relative_out_performance_wrt_index': insert_stmt.inserted.relative_out_performance_wrt_index,
             }
 
             upsert_stmt = insert_stmt.on_duplicate_key_update(update_cols)

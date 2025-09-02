@@ -220,10 +220,11 @@ def main():
         # Sort records to ensure consistent priority during de-duplication.
         # We prioritize 'underperforming' so it overwrites 'outperforming' for the same symbol.
         def sort_key(record):
-            status = record.get('relative_out_performance_wrt_index', '').lower()
-            if 'outperforming' in status:
+            # Using startswith() for a more specific and robust check after stripping whitespace.
+            status = record.get('relative_out_performance_wrt_index', '').strip().lower()
+            if status.startswith('outperforming'):
                 return 1  # Process first
-            if 'underperforming' in status:
+            if status.startswith('underperforming'):
                 return 2  # Process second, will overwrite
             return 0  # Should not happen
 
